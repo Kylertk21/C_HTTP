@@ -13,7 +13,10 @@ int main(int argc, char const *arv[]) {
   struct sockaddr_in address;
   int addrlen = sizeof(address);
 
-  char *hello = "Hello from server";
+  char *hello = "HTTP/1.1 200 OK\n\
+                Content-Type: text/plain\n\
+                Content-Length: 12\n\n\
+                Hello World!";
 
   // Creating socket File Descriptor
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {

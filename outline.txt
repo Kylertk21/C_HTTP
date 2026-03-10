@@ -1,0 +1,167 @@
+# Outline
+
+Simple HTTP Server
+
+## Transport Layer
+
+primarily responsible for ensuring data is transferred from one point to another without errors
+provides flow control and error handling, participates in solving problems concerned with transmission and 
+reception of packets
+
+TCP* - Transmission Control Protocol
+UDP - User Datagram Protocol
+SPX - Sequenced Packet Exchange
+
+## Sockets
+
+Mechanism that most OSs provide to give programs access to the network
+allows messages to be sent and received between apps on different networked machines
+Independent of any specific type of network. IP is the most dominant network and popular use of sockets
+
+### Steps
+
+- Create socket
+- Identify socket
+- On server, wait for incoming connection
+- Send and receive messages
+- Close socket
+
+#### Create Socket:
+"requesting a telephone line from the phone company"
+
+    int server_fd = socket(domain, type, protocol);
+
+domain / address family: communication domain in which the socket should be created;
+    AF_INET (IP), AF_INET6(IPv6), AF_UNIX(local channel, like pipes)m AF_ISO(ISO Protocols), AF_NS(Xeros Network Systems Protocols)
+
+type: type of service, selected according to the properties required by the application;
+    SOCK_STREAM (virtual circuit service), SOCK_DGRAM(datagram), SOCK_RAW(direct ip service)
+
+protocol: used in supporting sockets operation, useful in cases where families have more than one protocol for a service,
+          return value is a file descriptor(small integer).
+
+    TCP/IP sockets need AF_INET domain, SOCK_STREAM(virtual circuit) service, standard protocol 0 (no others available for SOCK_STREAM)
+
+    #include <sys/socket.h>
+
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("cannot create socket");
+        return 0;
+    }
+
+#### Indentify (name) socket
+"assigning a phone number to the line you requested"
+
+assigning a transport address to the socket (port number), also called binding and address, uses bind syscall.
+transport address is defined in a socket address structure. takes a sockaddr struct whose actual format is determined on the address family
+(type of network) being used. i.e for Unix domain sockets, biond creates a file in the file system
+
+    int bind(int socket, const struct sockaddr *address, socklen_t address_len); 
+
+    - socket is socket created in step 1 (server_fd)
+    - sockaddr is a generic container that allows the OS to be able to read the first
+      couple of bytes that identify the address family, address family determines what variant of
+      the sockaddr struct to use that contains elements for that communication type
+      for IP networking, struct sockaddr_in is used, which is defined below;
+    - socklen_t used for length of sockaddr (since struct may differ with transport used) can be;
+
+       socklen_t = sizeof(struct sockaddr_in);
+
+       struct sockaddr_in // needs to be filled before calling bind
+    { 
+        __uint8_t         sin_len; 
+        sa_family_t       sin_family; 
+        in_port_t         sin_port; 
+        struct in_addr    sin_addr; 
+        char              sin_zero[8]; 
+    };
+
+    - sin_family: address family used when setting up the socket, AF_INET in this case
+    - sin_port: port number to be assigned, either by user or OS (by specifying port 0)
+      clients can allow OS to pick port, servers will want to specify
+    - sin_addr: address for the socket (machine's IP), one IP address for each network
+      interface (i.e one for WIFI and Ethernet). Can let OS use whatever it wants (by using 0.0.0.0),
+      defined by INADDR_ANY
+
+      Binding the socket;
+
+      #include <sys/socket.h>
+
+      struct sockaddr_in address;
+      const int PORT = 8080
+      /* htonl converts long int (address) to network representation */
+      /* htons converts short int (port) to network representation */
+
+      memset((char *)&address, 0, sizeof(address)); // fill in a memory block with a byte value
+      address.sin_family = AF_INET; // IP family
+      address.sin_port = htons(PORT); // 8080
+      address.sin_addr.s_addr = htonl(INADDR_ANY); // assign any address
+
+      if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("bind failed!\n");
+        return 0;
+      }
+
+#### Wait for connection on server
+
+Before client can connect, server should have a socket that is prepared to accept connections. listen syscall
+tells a socket that it should be capable of accepting incoming connections.
+
+    #include <sys/socket.h>
+
+    int listen(int socket, int backlog);
+
+    - backlog: defines max number of pending connections that can be queued
+
+accept syscall grabs the first connection request on the queue and creates a new socket for that connection
+original socket set up for listening is only for accepting connections, not exchanging data. 
+by default, socket operations are synchronous / blocking, accept will block until a connection is present on the queue.
+
+    #include <sys/socket.h>
+
+    int accept(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
+
+    - socket: socket set up for accepting connections with listen
+    - address: struct that gets filled in with address of client connecting
+    - address_len: length of address struct
+    
+    if (listen(server_fd, 3) < 0) {
+        perror("In listen"\n);
+        exit(EXIT_FAILURE);
+    }
+
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
+        (socklen_t*)&addrlen))<0) {
+        perror("In accept");
+        exit(EXIT_FAILURE);
+    }
+
+#### Send and receive messages
+
+sockets are now connected, communication can commence. read and write syscalls that work on files also work on sockets
+
+    char buffer[1024] = {0};
+
+    int valread = read( new_socket, buffer, 1024);
+    printf("%s\n", buffer);
+    if (valread < 0) {
+        printf("No bytes to read");
+    }
+
+    char *hello = "Hello from the server"; // meat of HTTP server
+    write(new_socket, hello, strlen(hello));
+
+
+
+#### Close the socket
+
+can be closed with close syscall used for files
+
+    close(new_socket);
+
+
+
+
+
+
+
